@@ -1,0 +1,10 @@
+---
+# Docker 安装脚本
+docker_install_script: "https://raw.githubusercontent.com/newxqkjfenxiang/docker-install/main/install-docker.sh"
+
+# SSH 配置
+ansible_user: root
+ansible_port: 22
+
+# Docker 安装完成后的检查命令
+docker_check_command: "docker --version"

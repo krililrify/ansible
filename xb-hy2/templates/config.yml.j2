@@ -1,0 +1,21 @@
+panel:
+  url: "{{ panel_url }}"
+  token: "{{ panel_token }}"
+  node_id: {{ node_id }}
+
+kernel:
+  type: "singbox"
+  config_dir: "/etc/xboard-node"
+  log_level: "warn"
+
+cert:
+  cert_mode: "dns"
+  domain: "{{ domain }}"
+  email: "{{ email }}"
+  dns_provider: "cloudflare"
+  dns_env:
+    CF_API_TOKEN: "{{ cf_api_token }}"
+
+log:
+  level: "info"
+  output: "stdout"

@@ -1,0 +1,74 @@
+---
+- name: Deploy v2node
+  hosts: v2node
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Install required packages
+      apt:
+        name:
+          - wget
+          - unzip
+          - pv
+          - cron
+        state: present
+        update_cache: true
+
+    - name: Download v2node install script
+      get_url:
+        url: https://raw.githubusercontent.com/wyx2685/v2node/master/script/install.sh
+        dest: /tmp/v2node-install.sh
+        mode: '0755'
+
+    - name: Check v2node binary
+      stat:
+        path: /usr/local/v2node/v2node
+      register: v2node_binary
+
+    - name: Run v2node installer
+      shell: printf 'n\n' | bash /tmp/v2node-install.sh
+      args:
+        chdir: /tmp
+      when: not v2node_binary.stat.exists
+
+    - name: Create v2node config directory
+      file:
+        path: /etc/v2node
+        state: directory
+        mode: '0755'
+
+    - name: Deploy v2node config
+      template:
+        src: templates/config.json.j2
+        dest: /etc/v2node/config.json
+        mode: '0600'
+
+    - name: Enable v2node service
+      systemd:
+        name: v2node
+        enabled: true
+        daemon_reload: true
+
+    - name: Restart v2node
+      systemd:
+        name: v2node
+        state: restarted
+
+    - name: Wait for v2node
+      pause:
+        seconds: 3
+
+    - name: Check v2node status
+      command: systemctl is-active v2node
+      register: v2node_status
+      changed_when: false
+
+    - name: Show v2node status
+      debug:
+        msg: "v2node status: {{ v2node_status.stdout }}"
+
+    - name: Show deployed NodeIDs
+      debug:
+        msg: "NodeID1={{ node_id_1 }} NodeID2={{ node_id_2 }}"

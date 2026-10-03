@@ -1,0 +1,36 @@
+kernel:
+  type: "singbox"
+  config_dir: "/etc/xboard-node"
+  log_level: "warn"
+
+log:
+  level: "info"
+  output: "stdout"
+
+instances:
+
+  - panel:
+      url: "{{ panel_a }}"
+      token: "{{ token_a }}"
+      node_id: {{ node_id_a }}
+
+    cert:
+      cert_mode: "dns"
+      domain: "{{ domain_a }}"
+      email: "{{ email_a }}"
+      dns_provider: "cloudflare"
+      dns_env:
+        CF_API_TOKEN: "{{ cf_api_a }}"
+
+  - panel:
+      url: "{{ panel_b }}"
+      token: "{{ token_b }}"
+      node_id: {{ node_id_b }}
+
+    cert:
+      cert_mode: "dns"
+      domain: "{{ domain_b }}"
+      email: "{{ email_b }}"
+      dns_provider: "cloudflare"
+      dns_env:
+        CF_API_TOKEN: "{{ cf_api_b }}"

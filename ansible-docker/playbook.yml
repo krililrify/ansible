@@ -1,0 +1,185 @@
+---
+- name: Docker 一键安装
+  hosts: docker_servers
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    # ==========================================
+    # 基础信息
+    # ==========================================
+
+    - name: 显示目标服务器信息
+      debug:
+        msg:
+          - "目标 IP: {{ ansible_host }}"
+          - "系统: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "架构: {{ ansible_architecture }}"
+
+    - name: 检查系统是否为 Debian/Ubuntu
+      assert:
+        that:
+          - ansible_os_family == "Debian"
+        fail_msg: "暂不支持 {{ ansible_distribution }}，目前仅支持 Debian/Ubuntu。"
+
+    # ==========================================
+    # APT
+    # ==========================================
+
+    - name: 检查系统时间
+      command: date
+      register: system_time
+      changed_when: false
+
+    - name: 显示系统时间
+      debug:
+        msg: "目标服务器时间: {{ system_time.stdout }}"
+
+    - name: 测试 APT 更新
+      command: apt-get update
+      register: apt_update_result
+      changed_when: false
+      failed_when: false
+
+    - name: 显示 APT 更新结果
+      debug:
+        msg: "APT 返回码: {{ apt_update_result.rc }}"
+
+    # ==========================================
+    # 处理 Release file expired
+    # ==========================================
+
+    - name: 检查是否存在 Release file 过期问题
+      set_fact:
+        apt_release_expired: >-
+          {{
+            apt_update_result.rc != 0
+            and (
+              'Release file' in apt_update_result.stderr
+              or 'expired' in apt_update_result.stderr
+            )
+          }}
+
+    - name: 显示 APT 过期状态
+      debug:
+        msg: "检测到 APT Release 过期: {{ apt_release_expired }}"
+
+    - name: 禁用 APT Release 有效期检查
+      copy:
+        dest: /etc/apt/apt.conf.d/99ansible-docker
+        content: |
+          Acquire::Check-Valid-Until "false";
+        owner: root
+        group: root
+        mode: "0644"
+      when: apt_release_expired
+
+    - name: 重新更新 APT
+      command: apt-get update
+      register: apt_update_retry
+      changed_when: false
+      when: apt_release_expired
+
+    - name: 检查 APT 是否恢复正常
+      assert:
+        that:
+          - apt_update_retry.rc == 0
+        fail_msg: |
+          APT 更新失败。
+
+          返回信息：
+          {{ apt_update_retry.stderr | default('未知错误') }}
+      when: apt_release_expired
+
+    # ==========================================
+    # Docker
+    # ==========================================
+
+    - name: 检查 Docker 是否已经安装
+      command: docker --version
+      register: docker_existing
+      changed_when: false
+      failed_when: false
+
+    - name: 显示 Docker 当前状态
+      debug:
+        msg: >-
+          {{
+            docker_existing.stdout
+            if docker_existing.rc == 0
+            else 'Docker 未安装'
+          }}
+
+    - name: 下载 Docker 安装脚本
+      get_url:
+        url: "{{ docker_install_script }}"
+        dest: /tmp/install-docker.sh
+        mode: "0755"
+        force: true
+      when: docker_existing.rc != 0
+
+    - name: 执行 Docker 安装脚本
+      shell: /tmp/install-docker.sh
+      args:
+        executable: /bin/bash
+      register: docker_install_result
+      when: docker_existing.rc != 0
+
+    - name: 显示 Docker 安装输出
+      debug:
+        msg: "{{ docker_install_result.stdout_lines }}"
+      when:
+        - docker_existing.rc != 0
+        - docker_install_result is defined
+
+    # ==========================================
+    # Docker 服务
+    # ==========================================
+
+    - name: 确保 Docker 服务启动
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    # ==========================================
+    # Docker 检查
+    # ==========================================
+
+    - name: 检查 Docker 是否安装成功
+      command: "{{ docker_check_command }}"
+      register: docker_version
+      changed_when: false
+
+    - name: 显示 Docker 版本
+      debug:
+        msg: "{{ docker_version.stdout }}"
+
+    - name: 检查 Docker Compose
+      command: docker compose version
+      register: docker_compose_version
+      changed_when: false
+      failed_when: false
+
+    - name: 显示 Docker Compose 版本
+      debug:
+        msg: >-
+          {{
+            docker_compose_version.stdout
+            if docker_compose_version.rc == 0
+            else 'Docker Compose 未安装'
+          }}
+
+    # ==========================================
+    # 最终结果
+    # ==========================================
+
+    - name: Docker 安装完成
+      debug:
+        msg:
+          - "=========================================="
+          - "Docker 安装成功"
+          - "Docker: {{ docker_version.stdout }}"
+          - "Compose: {{ docker_compose_version.stdout | default('未安装') }}"
+          - "=========================================="

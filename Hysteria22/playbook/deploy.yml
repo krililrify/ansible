@@ -1,0 +1,99 @@
+---
+- name: Deploy XBoard HY2 dual nodes
+  hosts: xboard
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Check SSH connection
+      ping:
+
+    - name: Check Docker
+      command:
+        cmd: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Check Docker Compose
+      command:
+        cmd: docker compose version
+      register: docker_compose_version
+      changed_when: false
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install git
+      apt:
+        name: git
+        state: present
+
+    - name: Check xboard-node directory
+      stat:
+        path: /root/xboard-node
+      register: xboard_node_dir
+
+    - name: Clone xboard-node compose branch
+      git:
+        repo: https://github.com/cedar2025/xboard-node.git
+        version: compose
+        depth: 1
+        dest: /root/xboard-node
+      when: not xboard_node_dir.stat.exists
+
+    - name: Verify xboard-node directory
+      stat:
+        path: /root/xboard-node
+      register: xboard_node_check
+
+    - name: Fail if xboard-node directory is unavailable
+      fail:
+        msg: "/root/xboard-node 不存在，无法继续部署"
+      when: not xboard_node_check.stat.exists
+
+    - name: Create xboard-node config directory
+      file:
+        path: /root/xboard-node/config
+        state: directory
+        mode: "0755"
+
+    - name: Generate xboard-node config
+      template:
+        src: "{{ playbook_dir }}/../templates/config.yml.j2"
+        dest: /root/xboard-node/config/config.yml
+        mode: "0600"
+      no_log: true
+
+    - name: Start xboard-node
+      command:
+        cmd: docker compose up -d
+        chdir: /root/xboard-node
+
+    - name: Wait for xboard-node container startup
+      pause:
+        seconds: 5
+
+    - name: Show docker compose status
+      command:
+        cmd: docker compose ps
+        chdir: /root/xboard-node
+      register: docker_status
+      changed_when: false
+
+    - name: Display docker compose status
+      debug:
+        msg: "{{ docker_status.stdout }}"
+
+    - name: Check xboard-node container logs
+      command:
+        cmd: docker compose logs --tail=30
+        chdir: /root/xboard-node
+      register: docker_logs
+      changed_when: false
+
+    - name: Display recent xboard-node logs
+      debug:
+        msg: "{{ docker_logs.stdout }}"
